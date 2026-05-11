@@ -112,137 +112,131 @@ if run_button:
         col3.metric("Alpha Score", f"{results_df.iloc[0]['total_score']:.2f}")
         col4.metric("Max Allocation", f"{results_df['kelly_pct'].max():.1f}%")
 
-        # --- TABULAR & ANALYTICAL INTERFACE ---
-        tab1, tab2, tab3 = st.tabs(["Active Opportunities", "Risk Intelligence", "Macro & Events"])
+        # --- CONSOLIDATED ANALYSIS INTERFACE ---
+        st.subheader("Top Alpha Opportunities")
+        
+        def format_opp_df(df_to_format):
+            f_df = df_to_format.copy()
+            if 'strike' in f_df.columns: f_df['strike'] = f_df['strike'].map('${:,.1f}'.format)
+            if 'last_price' in f_df.columns: f_df['last_price'] = f_df['last_price'].map('${:,.2f}'.format)
+            if 'vol_edge' in f_df.columns: f_df['vol_edge'] = (f_df['vol_edge'] * 100).map('{:+.1f}%'.format)
+            if 'vol_skew' in f_df.columns: f_df['vol_skew'] = (f_df['vol_skew'] * 100).map('{:+.1f}%'.format)
+            if 'max_pain' in f_df.columns: f_df['max_pain'] = f_df['max_pain'].map('${:,.1f}'.format)
+            if 'kelly_pct' in f_df.columns: f_df['kelly_pct'] = f_df['kelly_pct'].map('{:.1f}%'.format)
+            if 'prob_target' in f_df.columns: f_df['prob_target'] = (f_df['prob_target'] * 100).map('{:.0f}%'.format)
+            if 'total_score' in f_df.columns: f_df['total_score'] = f_df['total_score'].map('{:.2f}'.format)
+            
+            # Definir columnas de salida deseadas
+            desired_cols = ['rank', 'ticker', 'expiration', 'dte', 'strike', 'last_price', 'max_pain', 'vol_skew', 'pcr', 'vol_edge', 'beta', 'kelly_pct', 'prob_target', 'total_score']
+            available_output = [c for c in desired_cols if c in f_df.columns]
+            return f_df[available_output]
 
-        with tab1:
-            st.subheader("Top Alpha Opportunities")
-            
-            def format_opp_df(df_to_format):
-                f_df = df_to_format.copy()
-                if 'strike' in f_df.columns: f_df['strike'] = f_df['strike'].map('${:,.1f}'.format)
-                if 'last_price' in f_df.columns: f_df['last_price'] = f_df['last_price'].map('${:,.2f}'.format)
-                if 'vol_edge' in f_df.columns: f_df['vol_edge'] = (f_df['vol_edge'] * 100).map('{:+.1f}%'.format)
-                if 'vol_skew' in f_df.columns: f_df['vol_skew'] = (f_df['vol_skew'] * 100).map('{:+.1f}%'.format)
-                if 'max_pain' in f_df.columns: f_df['max_pain'] = f_df['max_pain'].map('${:,.1f}'.format)
-                if 'kelly_pct' in f_df.columns: f_df['kelly_pct'] = f_df['kelly_pct'].map('{:.1f}%'.format)
-                if 'prob_target' in f_df.columns: f_df['prob_target'] = (f_df['prob_target'] * 100).map('{:.0f}%'.format)
-                if 'total_score' in f_df.columns: f_df['total_score'] = f_df['total_score'].map('{:.2f}'.format)
-                
-                # Definir columnas de salida deseadas
-                desired_cols = ['rank', 'ticker', 'expiration', 'dte', 'strike', 'last_price', 'max_pain', 'vol_skew', 'pcr', 'vol_edge', 'beta', 'kelly_pct', 'prob_target', 'total_score']
-                available_output = [c for c in desired_cols if c in f_df.columns]
-                return f_df[available_output]
+        # Define column configuration for tooltips (Glossary)
+        OPPORTUNITY_CONFIG = {
+            "rank": st.column_config.NumberColumn("Rank", help="Opportunity ranking based on total score."),
+            "ticker": st.column_config.TextColumn("Ticker", help="Stock ticker symbol."),
+            "expiration": st.column_config.TextColumn("Expiration", help="Option contract expiration date."),
+            "dte": st.column_config.NumberColumn("DTE", help="Days To Expiration."),
+            "strike": st.column_config.TextColumn("Strike", help="Option strike price."),
+            "last_price": st.column_config.TextColumn("Last Price", help="Last traded price of the option contract."),
+            "max_pain": st.column_config.TextColumn("Max Pain", help="Strike price where the most options (puts and calls) expire worthless."),
+            "vol_skew": st.column_config.TextColumn("Vol Skew", help="Implied Volatility difference between current strike and ATM."),
+            "pcr": st.column_config.NumberColumn("PCR", help="Open Interest Put/Call sentiment balance."),
+            "vol_edge": st.column_config.TextColumn("Vol Edge", help="Variance premium (Realized Historical Volatility - Implied Volatility)."),
+            "beta": st.column_config.NumberColumn("Beta", help="Systemic correlation coefficient to SPY (Market sensitivity)."),
+            "kelly_pct": st.column_config.TextColumn("Kelly %", help="Optimal risk-adjusted capital allocation percentage."),
+            "prob_target": st.column_config.TextColumn("P(Target)", help="Monte Carlo simulation probability for +15% contract return."),
+            "total_score": st.column_config.TextColumn("Total Score", help="Weighted probability index (0.0 - 1.0) for the opportunity.")
+        }
 
-            top_10 = results_df.head(10)
-            st.dataframe(format_opp_df(top_10), use_container_width=True, hide_index=True)
-            
-            if len(results_df) > 10:
-                with st.expander("Secondary Opportunities"):
-                    rest_df = results_df.iloc[10:]
-                    st.dataframe(format_opp_df(rest_df), use_container_width=True, hide_index=True)
-            
-            st.divider()
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("Volatility Edge Analysis")
-                fig_scatter = px.scatter(
-                    results_df, x="vol_edge", y="total_score", size="open_interest", 
-                    color="ticker", hover_name="ticker", template="plotly_dark"
+        top_10 = results_df.head(10)
+        st.dataframe(
+            format_opp_df(top_10), 
+            use_container_width=True, 
+            hide_index=True,
+            column_config=OPPORTUNITY_CONFIG
+        )
+        
+        if len(results_df) > 10:
+            with st.expander("Secondary Opportunities"):
+                rest_df = results_df.iloc[10:]
+                st.dataframe(
+                    format_opp_df(rest_df), 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config=OPPORTUNITY_CONFIG
                 )
-                fig_scatter.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_scatter, use_container_width=True)
-            with c2:
-                st.subheader("Capital Allocation (Kelly)")
-                fig_kelly = px.bar(
-                    top_10, x="ticker", y="kelly_pct", color="total_score", 
-                    template="plotly_dark", color_continuous_scale="Viridis"
-                )
-                fig_kelly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_kelly, use_container_width=True)
+        
+        st.divider()
+        # --- Analytics Row 1 ---
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("Alpha Score Ranking")
+            fig_scores = px.bar(
+                top_10, x="ticker", y="total_score", 
+                color="total_score",
+                color_continuous_scale="RdYlGn",
+                range_color=[0.5, 0.9],
+                template="plotly_dark",
+                labels={"total_score": "Total Score", "ticker": "Asset"}
+            )
+            fig_scores.add_hline(y=0.80, line_dash="dash", line_color="#00ff00", annotation_text="80% Threshold")
+            fig_scores.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', coloraxis_showscale=False)
+            st.plotly_chart(fig_scores, use_container_width=True)
+        with c2:
+            st.subheader("Capital Allocation (Kelly)")
+            fig_kelly = px.bar(
+                top_10, x="ticker", y="kelly_pct", color="total_score", 
+                template="plotly_dark", color_continuous_scale="Viridis"
+            )
+            fig_kelly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_kelly, use_container_width=True)
 
-        with tab2:
-            st.subheader("Risk Intelligence Matrix")
-            r1, r2 = st.columns(2)
+        # --- Analytics Row 2 ---
+        st.subheader("Technical Health Matrix")
+        cols_needed = ['rsi', 'z_score', 'pcr', 'vol_edge', 'beta']
+        available_cols = [c for c in cols_needed if c in results_df.columns]
+        
+        if available_cols:
+            heatmap_df = results_df.head(15).groupby('ticker')[available_cols].first()
             
-            with r1:
-                st.subheader("Efficiency Frontier (Beta vs Reward)")
-                fig_rr = px.scatter(
-                    results_df, x="beta", y="prob_target", size="kelly_pct", 
-                    color="ticker", template="plotly_dark"
-                )
-                fig_rr.add_vline(x=1.0, line_dash="dash", line_color="#4f4f4f")
-                fig_rr.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_rr, use_container_width=True)
+            # Map metric names to descriptions for tooltips
+            metric_desc = {
+                'rsi': 'Relative Strength Index (Momentum)',
+                'z_score': 'Std Dev Distance from EMA-20',
+                'pcr': 'Put/Call Ratio Sentiment',
+                'vol_edge': 'HV minus IV Premium',
+                'beta': 'Market Correlation (SPY)'
+            }
             
-            with r2:
-                st.subheader("Technical Health Heatmap")
-                cols_needed = ['rsi', 'z_score', 'pcr', 'vol_edge']
-                available_cols = [c for c in cols_needed if c in results_df.columns]
-                
-                if available_cols:
-                    heatmap_df = results_df.groupby('ticker')[available_cols].first()
-                    fig_hm = go.Figure(data=go.Heatmap(
-                        z=heatmap_df.T.values, x=heatmap_df.index, y=heatmap_df.columns,
-                        colorscale='RdYlGn', texttemplate="%{z:.2f}", hoverinfo="z"
-                    ))
-                    fig_hm.update_layout(template="plotly_dark", height=350, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_hm, use_container_width=True)
-                else:
-                    st.warning("Insufficient technical telemetry for matrix generation.")
+            # Create hover text matrix
+            hover_text = []
+            for metric in heatmap_df.columns:
+                row_hover = []
+                desc = metric_desc.get(metric, 'Metric Value')
+                for ticker in heatmap_df.index:
+                    val = heatmap_df.loc[ticker, metric]
+                    row_hover.append(f"Ticker: {ticker}<br>Metric: {metric}<br>Definition: {desc}<br>Value: {val:.2f}")
+                hover_text.append(row_hover)
 
-        with tab3:
-            st.subheader("Macro Sentiment & Calendar")
-            e1, e2 = st.columns([1, 2])
-            
-            with e1:
-                st.subheader("Macro Pulse (SPY)")
-                fig_gauge = go.Figure(go.Indicator(
-                    mode = "gauge+number", value = spy_dist,
-                    domain = {'x': [0, 1], 'y': [0, 1]},
-                    gauge = {
-                        'axis': {'range': [-5, 5], 'tickwidth': 1, 'tickcolor': "#4f4f4f"},
-                        'bar': {'color': "#ffffff"},
-                        'steps': [
-                            {'range': [-5, -1.5], 'color': "#3d0a0a"},
-                            {'range': [-1.5, 1.5], 'color': "#2d2d0a"},
-                            {'range': [1.5, 5], 'color': "#0a2d0a"}
-                        ],
-                        'threshold': {'line': {'color': "#00ff00", 'width': 2}, 'thickness': 0.75, 'value': 0}
-                    }
-                ))
-                fig_gauge.update_layout(template="plotly_dark", height=300, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_gauge, use_container_width=True)
-                st.caption(f"Index Level: ${spy_price:.2f} | EMA-20 Baseline: ${spy_ema:.2f}")
-
-            with e2:
-                st.subheader("Corporate Events Timeline")
-                def safe_days_to(date_obj):
-                    if date_obj is None: return 99
-                    try:
-                        if isinstance(date_obj, str): dt = pd.to_datetime(date_obj).to_pydatetime()
-                        elif hasattr(date_obj, 'to_pydatetime'): dt = date_obj.to_pydatetime()
-                        else: dt = date_obj
-                        return (dt.replace(tzinfo=None) - datetime.now()).days
-                    except: return 99
-
-                event_data = []
-                for t in tickers:
-                    if t in stock_metrics:
-                        m = stock_metrics[t]
-                        event_data.append({'ticker': t, 'type': 'Earnings', 'days': safe_days_to(m['earnings_date'])})
-                        event_data.append({'ticker': t, 'type': 'Dividend', 'days': safe_days_to(m['ex_div_date'])})
-                
-                event_df = pd.DataFrame(event_data)
-                event_df = event_df[event_df['days'] < 60]
-                
-                fig_timeline = px.bar(
-                    event_df, x="ticker", y="days", color="type", barmode="group",
-                    template="plotly_dark", color_discrete_map={'Earnings': '#1f77b4', 'Dividend': '#2ca02c'}
-                )
-                fig_timeline.add_hline(y=10, line_dash="dot", line_color="#ff7f0e")
-                fig_timeline.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_timeline, use_container_width=True)
+            fig_hm = go.Figure(data=go.Heatmap(
+                z=heatmap_df.T.values, 
+                x=heatmap_df.index, 
+                y=heatmap_df.columns,
+                colorscale='RdYlGn', 
+                texttemplate="%{z:.2f}", 
+                hoverinfo="text",
+                hovertext=hover_text
+            ))
+            fig_hm.update_layout(
+                template="plotly_dark", 
+                height=400, 
+                margin=dict(l=10, r=10, t=30, b=10), 
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig_hm, use_container_width=True)
+        else:
+            st.warning("Insufficient technical telemetry for matrix generation.")
 
 else:
     st.info("System Ready. Configure assets and duration in the terminal sidebar to initiate analysis.")
