@@ -69,6 +69,72 @@ delta_min, delta_max = st.sidebar.slider("Sensitivity (Delta)", 0.10, 0.95, (0.6
 run_button = st.sidebar.button("EXECUTE ANALYSIS", use_container_width=True, type="primary")
 force_refresh = st.sidebar.button("FORCE REFRESH (Clear Cache)", use_container_width=True)
 
+# --- CUSTOM SIMULATOR SECTION ---
+st.sidebar.divider()
+st.sidebar.subheader("🎯 CUSTOM PROBABILITY CALCULATOR")
+with st.sidebar.expander("Configure Manual Contract"):
+    calc_ticker = st.text_input("Ticker", value="SOFI").upper()
+    calc_dte = st.number_input("DTE", value=30, min_value=1)
+    calc_strike = st.number_input("Strike Price", value=10.0, step=0.5)
+    calc_target = st.number_input("Price Target (Optional)", value=0.0, step=0.5, help="Set to 0 to use +15% default")
+    
+    run_calc = st.button("CALCULATE PROBABILITIES", use_container_width=True)
+
+if run_calc:
+    from call_swing_scanner import monte_carlo_probabilities, estimate_delta
+    import yfinance as yf
+    
+    with st.spinner(f"Simulating {calc_ticker} probabilities..."):
+        try:
+            # 1. Fetch current telemetry
+            hist = get_historical_data(calc_ticker, period="3mo")
+            if hist is not None and not hist.empty:
+                s_price = hist['Close'].iloc[-1]
+                # Annualized Volatility (20-day)
+                returns = np.log(hist['Close'] / hist['Close'].shift(1))
+                sigma = returns.tail(20).std() * np.sqrt(252)
+                T = calc_dte / 252.0
+                
+                # 2. Determine Target
+                # Default logic: Target is what's needed for +15% gain on call (simplified approximation)
+                if calc_target <= 0:
+                    delta_est = estimate_delta(s_price, calc_strike, T, RISK_FREE_RATE, sigma)
+                    # Simple Delta approximation: dPrice = dOption / Delta
+                    needed_gain = 0.15 * (s_price * 0.05) # Assume option price is ~5% of stock
+                    final_target = s_price + (needed_gain / max(delta_est, 0.1))
+                else:
+                    final_target = calc_target
+
+                # 3. Run Simulation
+                prob_strike, prob_target, paths = monte_carlo_probabilities(
+                    s_price, calc_strike, final_target, T, RISK_FREE_RATE, sigma, 
+                    num_sims=10000, return_paths=True
+                )
+                
+                # 4. Display Results in Sidebar
+                st.sidebar.success("Simulation Complete")
+                st.sidebar.metric("Prob. of Touch (Strike)", f"{prob_strike*100:.1f}%")
+                st.sidebar.metric(f"Prob. of Target (${final_target:.2f})", f"{prob_target*100:.1f}%")
+                
+                # Distribution Plot
+                final_prices = paths[:, -1]
+                fig_dist = px.histogram(
+                    final_prices, nbins=50, 
+                    title=f"Price Distribution at Expiry ({calc_ticker})",
+                    labels={'value': 'Stock Price'},
+                    template="plotly_dark",
+                    color_discrete_sequence=['#4f4f4f']
+                )
+                fig_dist.add_vline(x=s_price, line_dash="dot", line_color="white", annotation_text="Current")
+                fig_dist.add_vline(x=calc_strike, line_dash="dash", line_color="orange", annotation_text="Strike")
+                fig_dist.add_vline(x=final_target, line_dash="dash", line_color="#00ff00", annotation_text="Target")
+                fig_dist.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.sidebar.plotly_chart(fig_dist, use_container_width=True)
+            else:
+                st.sidebar.error("Could not fetch ticker data.")
+        except Exception as e:
+            st.sidebar.error(f"Error: {str(e)}")
+
 if force_refresh:
     st.cache_data.clear()
     st.info("Cache cleared. Please click 'EXECUTE ANALYSIS' to see updated metrics.")
