@@ -13,48 +13,96 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for high-end aesthetic
+# Custom CSS for high-end institutional aesthetic
 st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+        --bg-color: #0a0b10;
+        --card-bg: rgba(30, 34, 45, 0.7);
+        --border-color: rgba(255, 255, 255, 0.1);
+        --accent-glow: rgba(0, 255, 128, 0.15);
+        --text-main: #e0e0e0;
+    }
+
     .main {
-        background-color: #0e1117;
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        font-family: 'Inter', sans-serif;
     }
-    .stMetric {
-        background-color: #1e2130;
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #2d3139;
+
+    /* Glassmorphism Containers */
+    div[data-testid="stMetric"], .stDataFrame, div[data-testid="stExpander"], .stPlotlyChart {
+        background: var(--card-bg) !important;
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--border-color) !important;
+        border-radius: 12px !important;
+        padding: 20px !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        transition: all 0.3s ease;
     }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
+    
+    div[data-testid="stMetric"]:hover {
+        border: 1px solid rgba(0, 255, 128, 0.3) !important;
+        box-shadow: 0 0 20px var(--accent-glow);
     }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: transparent;
-        border-radius: 4px 4px 0px 0px;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-    }
-    div[data-testid="stExpander"] {
-        border: none;
-        background-color: #1e2130;
-        border-radius: 8px;
-    }
+
+    /* Refined Typography */
     h1, h2, h3 {
         font-family: 'Inter', sans-serif;
-        font-weight: 600;
-        color: #e0e0e0;
+        font-weight: 600 !important;
+        letter-spacing: -0.5px;
+        background: linear-gradient(90deg, #fff, #888);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
-    .reportview-container .main .block-container {
-        padding-top: 2rem;
+
+    .stCaption {
+        font-family: 'JetBrains Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 0.75rem !important;
+        color: #00ff80 !important;
+        opacity: 0.8;
     }
+
+    /* Institutional Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #0e1015 !important;
+        border-right: 1px solid var(--border-color);
+    }
+
+    /* Buttons */
+    .stButton>button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.2s ease !important;
+    }
+
+    div.stButton > button:first-child {
+        background-color: #00ff80;
+        color: #000;
+        border: none;
+    }
+
+    div.stButton > button:first-child:hover {
+        background-color: #05ff85;
+        box-shadow: 0 0 15px rgba(0, 255, 128, 0.4);
+        transform: translateY(-1px);
+    }
+
+    /* Hide Streamlit Branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
 st.title("SWING SCANNER TERMINAL")
-st.caption("Statistical Optimization & Market Intelligence | Version 3.0")
+st.caption("Statistical Optimization & Market Intelligence")
 
 # --- NAVIGATION ---
 st.sidebar.title("TERMINAL NAVIGATION")
@@ -246,6 +294,42 @@ if view_mode == "Scanner Terminal":
             else:
                 st.warning("Insufficient technical telemetry for matrix generation.")
 
+            # --- TICKER DEEP DIVE SECTION ---
+            st.divider()
+            st.header("🔬 TICKER INTELLIGENCE DEEP-DIVE")
+            
+            # Ticker selection (Defaults to highest score)
+            top_tickers = results_df['ticker'].unique().tolist()
+            selected_deep_dive = st.selectbox("Select Asset for Detailed Intelligence", options=top_tickers, index=0)
+
+            if selected_deep_dive:
+                with st.spinner(f"Retrieving deep telemetry for {selected_deep_dive}..."):
+                    # Fetch fresh data for the selected ticker
+                    deep_hist = get_historical_data(selected_deep_dive, period="6mo")
+                    if deep_hist is not None:
+                        # 1. Price & Trend Chart
+                        deep_hist['EMA_20'] = deep_hist['Close'].ewm(span=20, adjust=False).mean()
+                        fig_price = go.Figure()
+                        fig_price.add_trace(go.Scatter(x=deep_hist['Date'], y=deep_hist['Close'], name='Price', line=dict(color='#ffffff', width=2)))
+                        fig_price.add_trace(go.Scatter(x=deep_hist['Date'], y=deep_hist['EMA_20'], name='EMA-20', line=dict(color='#00ff80', width=1, dash='dash')))
+                        fig_price.update_layout(title=f"{selected_deep_dive} | Price Action & Structural Trend", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400)
+                        st.plotly_chart(fig_price, use_container_width=True)
+
+                        # 2. Volatility Pulse (HV vs IV)
+                        # We calculate rolling 20d HV
+                        deep_hist['Returns'] = np.log(deep_hist['Close'] / deep_hist['Close'].shift(1))
+                        deep_hist['HV_20'] = deep_hist['Returns'].rolling(window=20).std() * np.sqrt(252)
+                        
+                        # Get current IV from results_df
+                        current_iv = results_df[results_df['ticker'] == selected_deep_dive]['vol_edge'].iloc[0] # This is actually HV-IV
+                        # Let's just plot the HV trend for now as IV history isn't saved
+                        fig_vol = px.line(deep_hist, x='Date', y='HV_20', title=f"{selected_deep_dive} | Realized Volatility Pulse (20D)", template="plotly_dark")
+                        fig_vol.update_traces(line_color='#ff7f0e')
+                        fig_vol.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
+                        st.plotly_chart(fig_vol, use_container_width=True)
+                    else:
+                        st.error("Failed to retrieve historical data for deep-dive.")
+
     else:
         st.info("System Ready. Configure assets and duration in the terminal sidebar to initiate analysis.")
 
@@ -264,15 +348,19 @@ elif view_mode == "Custom Simulator":
     draw_glossary()
 
     if run_calc:
-        from call_swing_scanner import monte_carlo_probabilities, estimate_delta
+        from call_swing_scanner import monte_carlo_probabilities, estimate_delta, estimate_jump_parameters
         import yfinance as yf
         
-        with st.spinner(f"Simulating {calc_ticker} paths..."):
+        with st.spinner(f"Running high-fidelity simulation for {calc_ticker}..."):
             try:
                 # 1. Fetch current telemetry
-                hist = get_historical_data(calc_ticker, period="3mo")
+                hist = get_historical_data(calc_ticker, period="6mo") # Usamos 6 meses para mejores parámetros de saltos
                 if hist is not None and not hist.empty:
                     s_price = hist['Close'].iloc[-1]
+                    
+                    # Estimate Dynamic Jump Parameters
+                    j_lambda, j_mu, j_sigma = estimate_jump_parameters(hist)
+                    
                     # Annualized Volatility (20-day)
                     returns = np.log(hist['Close'] / hist['Close'].shift(1))
                     sigma = returns.tail(20).std() * np.sqrt(252)
@@ -286,10 +374,11 @@ elif view_mode == "Custom Simulator":
                     else:
                         final_target = calc_target
 
-                    # 3. Run Simulation
+                    # 3. Run Simulation (Increased to 50,000 sims for high precision)
                     prob_strike, prob_target, paths = monte_carlo_probabilities(
                         s_price, calc_strike, final_target, T, RISK_FREE_RATE, sigma, 
-                        num_sims=10000, return_paths=True
+                        num_sims=50000, return_paths=True,
+                        j_lambda=j_lambda, j_mu=j_mu, j_sigma=j_sigma
                     )
                     
                     st.divider()
@@ -300,11 +389,11 @@ elif view_mode == "Custom Simulator":
                     dist_to_target = (final_target / s_price) - 1
                     theta_risk = dist_to_target / (calc_dte / 30.0)
                     
-                    res1.metric("Prob. of Touch", f"{prob_strike*100:.1f}%")
-                    res2.metric("Prob. of Target", f"{prob_target*100:.1f}%")
-                    res3.metric("Expected Value (EPV)", f"{epv_score:.2f}")
+                    res1.metric("Prob. of Touch", f"{prob_strike*100:.2f}%")
+                    res2.metric("Prob. of Target", f"{prob_target*100:.2f}%")
+                    res3.metric("Expected Value (EPV)", f"{epv_score:.3f}")
 
-                    st.info(f"**Feasibility Intelligence:** Time Decay Risk is **{ 'HIGH' if theta_risk > 0.1 else 'MODERATE' if theta_risk > 0.05 else 'LOW' }**. Target Price used: **${final_target:.2f}**")
+                    st.info(f"**Statistical Precision:** Merton Jump-Diffusion (N=50,000) with Antithetic Variates. <br> **Dynamic Jump Params:** λ={j_lambda:.1f}, μ={j_mu:.2f}, σ={j_sigma:.2f}. Target Price: **${final_target:.2f}**", unsafe_allow_html=True)
                     
                     # Distribution Plot
                     final_prices = paths[:, -1]

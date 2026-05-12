@@ -66,6 +66,34 @@ JUMP_SIGMA = 0.05           # Desviación estándar del salto
 # FUNCIONES AUXILIARES
 # ============================================
 
+def estimate_jump_parameters(hist_df):
+    """
+    Analiza gaps históricos para parametrizar el modelo de Merton.
+    Busca retornos que excedan 2 desviaciones estándar.
+    """
+    try:
+        returns = np.log(hist_df['Close'] / hist_df['Close'].shift(1)).dropna()
+        mu_ret = returns.mean()
+        std_ret = returns.std()
+        
+        # Definimos "salto" como cualquier movimiento > 2 sigma
+        jumps = returns[np.abs(returns - mu_ret) > 2 * std_ret]
+        
+        if len(jumps) > 0:
+            # Lambda: Frecuencia de saltos anualizada
+            # (Num saltos / Num días totales) * 252
+            lambda_est = (len(jumps) / len(returns)) * 252
+            mu_j = jumps.mean()
+            sigma_j = jumps.std() if len(jumps) > 1 else 0.05
+        else:
+            lambda_est = 5.0  # Default conservador
+            mu_j = 0.0
+            sigma_j = 0.05
+            
+        return lambda_est, mu_j, sigma_j
+    except:
+        return 10.0, -0.01, 0.05
+
 def ensure_output_dir():
     """Crear directorio de salida si no existe."""
     if not os.path.exists(OUTPUT_DIR):
@@ -78,13 +106,17 @@ def estimate_delta(S, K, T, r, sigma):
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     return stats.norm.cdf(d1)
 
-def monte_carlo_probabilities(S, K, target_price, T, r, sigma, num_sims=5000, return_paths=False):
+def monte_carlo_probabilities(S, K, target_price, T, r, sigma, num_sims=5000, return_paths=False, j_lambda=None, j_mu=None, j_sigma=None):
     """
-    Simulación Monte Carlo usando Jump-Diffusion (Merton) para mayor realismo.
+    Simulación Monte Carlo optimizada con Jump-Diffusion y Antithetic Variates.
     """
-    # Fijar semilla para resultados reproducibles y consistentes
     np.random.seed(42)
     
+    # Usar parámetros dinámicos si se proveen, si no usar constantes globales
+    L = j_lambda if j_lambda is not None else JUMP_LAMBDA
+    MJ = j_mu if j_mu is not None else JUMP_MU
+    SJ = j_sigma if j_sigma is not None else JUMP_SIGMA
+
     if T <= 0:
         if return_paths:
             return (1.0 if S >= K else 0.0), (1.0 if S >= target_price else 0.0), np.array([[S]])
@@ -93,23 +125,27 @@ def monte_carlo_probabilities(S, K, target_price, T, r, sigma, num_sims=5000, re
     trading_days = max(1, int(T * 252))
     dt = T / trading_days
     
-    # Deriva ajustada por Jensen y Jumps
-    drift = (r - 0.5 * sigma**2 - JUMP_LAMBDA * (np.exp(JUMP_MU + 0.5 * JUMP_SIGMA**2) - 1)) * dt
+    # Reducir varianza: Antithetic Variates (usamos la mitad de sims y sus espejos)
+    n_half = num_sims // 2
     
-    # Simular caminos vectorizados
+    drift = (r - 0.5 * sigma**2 - L * (np.exp(MJ + 0.5 * SJ**2) - 1)) * dt
+    
+    # Inicializar caminos (Original + Antithetic)
     paths = np.zeros((num_sims, trading_days + 1))
     paths[:, 0] = S
     
     for t in range(1, trading_days + 1):
-        # Componente normal
-        Z = np.random.standard_normal(num_sims)
+        # Componente normal con Antithetic Variates
+        Z_half = np.random.standard_normal(n_half)
+        Z = np.concatenate([Z_half, -Z_half])
         
-        # Componente de Saltos (Poisson)
-        N = np.random.poisson(JUMP_LAMBDA * dt, num_sims)
+        # Componente de Saltos
+        N = np.random.poisson(L * dt, num_sims)
         J = np.zeros(num_sims)
-        for i in range(num_sims):
-            if N[i] > 0:
-                J[i] = np.sum(np.random.normal(JUMP_MU, JUMP_SIGMA, N[i]))
+        # Vectorizar saltos: solo iteramos sobre sims que tuvieron saltos (eficiencia)
+        jump_indices = np.where(N > 0)[0]
+        for idx in jump_indices:
+            J[idx] = np.sum(np.random.normal(MJ, SJ, N[idx]))
         
         paths[:, t] = paths[:, t-1] * np.exp(drift + sigma * np.sqrt(dt) * Z + J)
     
