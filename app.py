@@ -300,35 +300,48 @@ if view_mode == "Scanner Terminal":
             
             # Ticker selection (Defaults to highest score)
             top_tickers = results_df['ticker'].unique().tolist()
-            selected_deep_dive = st.selectbox("Select Asset for Detailed Intelligence", options=top_tickers, index=0)
+            
+            @st.fragment
+            def draw_deep_dive(tickers_list):
+                selected_deep_dive = st.selectbox("Select Asset for Detailed Intelligence", options=tickers_list, index=0)
 
-            if selected_deep_dive:
-                with st.spinner(f"Retrieving deep telemetry for {selected_deep_dive}..."):
-                    # Fetch fresh data for the selected ticker
-                    deep_hist = get_historical_data(selected_deep_dive, period="6mo")
-                    if deep_hist is not None:
-                        # 1. Price & Trend Chart
-                        deep_hist['EMA_20'] = deep_hist['Close'].ewm(span=20, adjust=False).mean()
-                        fig_price = go.Figure()
-                        fig_price.add_trace(go.Scatter(x=deep_hist['Date'], y=deep_hist['Close'], name='Price', line=dict(color='#ffffff', width=2)))
-                        fig_price.add_trace(go.Scatter(x=deep_hist['Date'], y=deep_hist['EMA_20'], name='EMA-20', line=dict(color='#00ff80', width=1, dash='dash')))
-                        fig_price.update_layout(title=f"{selected_deep_dive} | Price Action & Structural Trend", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400)
-                        st.plotly_chart(fig_price, use_container_width=True)
+                if selected_deep_dive:
+                    with st.spinner(f"Retrieving deep telemetry for {selected_deep_dive}..."):
+                        deep_hist = get_historical_data(selected_deep_dive, period="6mo")
+                        if deep_hist is not None:
+                            # 1. Price & Trend Chart
+                            deep_hist['EMA_20'] = deep_hist['Close'].ewm(span=20, adjust=False).mean()
+                            fig_price = go.Figure()
+                            fig_price.add_trace(go.Scatter(x=deep_hist['Date'], y=deep_hist['Close'], name='Spot Price', line=dict(color='#ffffff', width=2)))
+                            fig_price.add_trace(go.Scatter(x=deep_hist['Date'], y=deep_hist['EMA_20'], name='EMA-20 (Trend)', line=dict(color='#00ff80', width=1, dash='dash')))
+                            fig_price.update_layout(
+                                title=f"{selected_deep_dive} | Price Action & Structural Trend", 
+                                template="plotly_dark", 
+                                paper_bgcolor='rgba(0,0,0,0)', 
+                                plot_bgcolor='rgba(0,0,0,0)', 
+                                height=400,
+                                showlegend=True,
+                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                            )
+                            st.plotly_chart(fig_price, use_container_width=True)
 
-                        # 2. Volatility Pulse (HV vs IV)
-                        # We calculate rolling 20d HV
-                        deep_hist['Returns'] = np.log(deep_hist['Close'] / deep_hist['Close'].shift(1))
-                        deep_hist['HV_20'] = deep_hist['Returns'].rolling(window=20).std() * np.sqrt(252)
-                        
-                        # Get current IV from results_df
-                        current_iv = results_df[results_df['ticker'] == selected_deep_dive]['vol_edge'].iloc[0] # This is actually HV-IV
-                        # Let's just plot the HV trend for now as IV history isn't saved
-                        fig_vol = px.line(deep_hist, x='Date', y='HV_20', title=f"{selected_deep_dive} | Realized Volatility Pulse (20D)", template="plotly_dark")
-                        fig_vol.update_traces(line_color='#ff7f0e')
-                        fig_vol.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
-                        st.plotly_chart(fig_vol, use_container_width=True)
-                    else:
-                        st.error("Failed to retrieve historical data for deep-dive.")
+                            # 2. Volatility Pulse
+                            deep_hist['Returns'] = np.log(deep_hist['Close'] / deep_hist['Close'].shift(1))
+                            deep_hist['HV_20'] = deep_hist['Returns'].rolling(window=20).std() * np.sqrt(252)
+                            
+                            fig_vol = px.line(deep_hist, x='Date', y='HV_20', title=f"{selected_deep_dive} | Realized Volatility Pulse (20D)", template="plotly_dark")
+                            fig_vol.update_traces(line_color='#ff7f0e', name="HV 20D")
+                            fig_vol.update_layout(
+                                paper_bgcolor='rgba(0,0,0,0)', 
+                                plot_bgcolor='rgba(0,0,0,0)', 
+                                height=300,
+                                showlegend=True
+                            )
+                            st.plotly_chart(fig_vol, use_container_width=True)
+                        else:
+                            st.error("Failed to retrieve historical data for deep-dive.")
+
+            draw_deep_dive(top_tickers)
 
     else:
         st.info("System Ready. Configure assets and duration in the terminal sidebar to initiate analysis.")
@@ -393,7 +406,16 @@ elif view_mode == "Custom Simulator":
                     res2.metric("Prob. of Target", f"{prob_target*100:.2f}%")
                     res3.metric("Expected Value (EPV)", f"{epv_score:.3f}")
 
-                    st.info(f"**Statistical Precision:** Merton Jump-Diffusion (N=50,000) with Antithetic Variates. <br> **Dynamic Jump Params:** λ={j_lambda:.1f}, μ={j_mu:.2f}, σ={j_sigma:.2f}. Target Price: **${final_target:.2f}**", unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="background: rgba(0, 255, 128, 0.05); border: 1px solid rgba(0, 255, 128, 0.2); border-radius: 10px; padding: 15px; margin: 10px 0;">
+                        <span style="color: #00ff80; font-weight: 600;">📊 STATISTICAL PRECISION:</span><br>
+                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: #e0e0e0;">
+                            Merton Jump-Diffusion (N=50,000) with Antithetic Variates.<br>
+                            Dynamic Jump Params: λ={j_lambda:.1f}, μ={j_mu:.2f}, σ={j_sigma:.2f}.<br>
+                            Target Price: <b>${final_target:.2f}</b> | Time Decay Risk: <b>{ 'HIGH' if theta_risk > 0.1 else 'MODERATE' if theta_risk > 0.05 else 'LOW' }</b>
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
                     # Distribution Plot
                     final_prices = paths[:, -1]
