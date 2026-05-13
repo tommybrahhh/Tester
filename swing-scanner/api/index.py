@@ -9,7 +9,7 @@ from call_swing_scanner import run_scan_logic, get_historical_data, RISK_FREE_RA
 
 app = Flask(__name__)
 
-@app.route("/scan", methods=["POST"])
+@app.route("/api/scan", methods=["POST"])
 def scan():
     data = request.json
     tickers = data.get("tickers", ["SOFI", "F", "PFE"])
@@ -38,7 +38,7 @@ def scan():
                     for t, m in stock_metrics.items()}
     })
 
-@app.route("/simulate", methods=["POST"])
+@app.route("/api/simulate", methods=["POST"])
 def simulate():
     from call_swing_scanner import monte_carlo_probabilities, estimate_delta, estimate_jump_parameters
     import numpy as np
@@ -91,6 +91,4 @@ def simulate():
     })
 
 if __name__ == "__main__":
-    app.run(debug=True)
-n__":
     app.run(debug=True)
