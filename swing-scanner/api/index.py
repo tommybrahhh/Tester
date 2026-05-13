@@ -38,7 +38,7 @@ def scan():
                     for t, m in stock_metrics.items()}
     })
 
-@app.route("/api/simulate", methods=["POST"])
+@app.route("/simulate", methods=["POST"])
 def simulate():
     from call_swing_scanner import monte_carlo_probabilities, estimate_delta, estimate_jump_parameters
     import numpy as np
@@ -91,4 +91,6 @@ def simulate():
     })
 
 if __name__ == "__main__":
+    app.run(debug=True)
+n__":
     app.run(debug=True)
