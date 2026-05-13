@@ -458,16 +458,33 @@ def run_scan_logic(tickers_list, dte_min, dte_max, delta_min, delta_max):
     """Ejecutar la lógica central del scanner y retornar resultados."""
     ensure_output_dir()
     
-    # 1. Obtener datos históricos y Macro SPY
-    spy_df = get_historical_data('SPY', period="6mo")
+    # 1. Obtener datos históricos y Macro SPY en BATCH (mucho más rápido)
+    import yfinance as yf
+    import requests
+    session = requests.Session()
+    session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'})
+    
+    all_tickers = tickers_list + ['SPY']
+    # yf.download es más eficiente para múltiples tickers
+    data = yf.download(all_tickers, period="6mo", session=session, group_by='ticker', progress=False)
+    
+    spy_df = data['SPY'].reset_index()
     
     stock_metrics = {}
     for ticker in tickers_list:
-        hist = get_historical_data(ticker, period="6mo")
-        if hist is not None:
-            stock_metrics[ticker] = calc_stock_metrics(ticker, hist, spy_df)
+        if ticker in data and not data[ticker].empty:
+            hist = data[ticker].reset_index()
+            # Incluir últimos 60 días de precios para el gráfico del frontend
+            history_data = hist.tail(60).apply(lambda row: {
+                'date': row['Date'].strftime('%Y-%m-%d'),
+                'price': float(row['Close'])
+            }, axis=1).tolist()
+            
+            metrics = calc_stock_metrics(ticker, hist, spy_df)
+            metrics['history'] = history_data
+            stock_metrics[ticker] = metrics
     
-    # 2. Obtener expiraciones y chains
+    # 2. Obtener expiraciones y chains (esto sigue siendo secuencial por ticker)
     all_opportunities = []
 
     for ticker in tickers_list:

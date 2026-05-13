@@ -1,18 +1,28 @@
 from flask import Flask, request, jsonify
 import sys
 import os
+import traceback
 
 # Add the current directory to sys.path to import call_swing_scanner
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from call_swing_scanner import run_scan_logic, get_historical_data, RISK_FREE_RATE
+
+try:
+    from call_swing_scanner import run_scan_logic, get_historical_data, RISK_FREE_RATE
+except Exception as e:
+    print(f"IMPORT ERROR: {e}")
+    print(traceback.format_exc())
 
 app = Flask(__name__)
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "python_version": sys.version})
 
 @app.route("/api/scan", methods=["POST"])
 def scan():
     try:
-        data = request.json
+        data = request.json or {}
         tickers = data.get("tickers", ["SOFI", "F", "PFE"])
         dte_range = data.get("dte_range", [30, 50])
         delta_range = data.get("delta_range", [0.60, 0.80])
@@ -39,7 +49,6 @@ def scan():
                         for t, m in stock_metrics.items()}
         })
     except Exception as e:
-        import traceback
         error_details = traceback.format_exc()
         print(error_details)
         return jsonify({
@@ -49,55 +58,58 @@ def scan():
 
 @app.route("/api/simulate", methods=["POST"])
 def simulate():
-    from call_swing_scanner import monte_carlo_probabilities, estimate_delta, estimate_jump_parameters
-    import numpy as np
-    import pandas as pd
-    
-    data = request.json
-    ticker = data.get("ticker", "SOFI")
-    dte = data.get("dte", 30)
-    strike = data.get("strike", 10.0)
-    target = data.get("target", 0.0)
-    
-    hist = get_historical_data(ticker, period="6mo")
-    if hist is None or hist.empty:
-        return jsonify({"error": "Ticker data not found"}), 404
+    try:
+        from call_swing_scanner import monte_carlo_probabilities, estimate_delta, estimate_jump_parameters
+        import numpy as np
         
-    s_price = hist['Close'].iloc[-1]
-    j_lambda, j_mu, j_sigma = estimate_jump_parameters(hist)
-    
-    returns = np.log(hist['Close'] / hist['Close'].shift(1))
-    sigma = returns.tail(20).std() * np.sqrt(252)
-    T = dte / 252.0
-    
-    if target <= 0:
-        delta_est = estimate_delta(s_price, strike, T, RISK_FREE_RATE, sigma)
-        needed_gain = 0.15 * (s_price * 0.05) 
-        final_target = s_price + (needed_gain / max(delta_est, 0.1))
-    else:
-        final_target = target
+        data = request.json or {}
+        ticker = data.get("ticker", "SOFI")
+        dte = data.get("dte", 30)
+        strike = data.get("strike", 10.0)
+        target = data.get("target", 0.0)
+        
+        hist = get_historical_data(ticker, period="6mo")
+        if hist is None or hist.empty:
+            return jsonify({"error": "Ticker data not found"}), 404
+            
+        s_price = hist['Close'].iloc[-1]
+        j_lambda, j_mu, j_sigma = estimate_jump_parameters(hist)
+        
+        returns = np.log(hist['Close'] / hist['Close'].shift(1))
+        sigma = returns.tail(20).std() * (252**0.5)
+        T = dte / 252.0
+        
+        if target <= 0:
+            delta_est = estimate_delta(s_price, strike, T, RISK_FREE_RATE, sigma)
+            needed_gain = 0.15 * (s_price * 0.05) 
+            final_target = s_price + (needed_gain / max(delta_est, 0.1))
+        else:
+            final_target = target
 
-    prob_strike, prob_target, paths = monte_carlo_probabilities(
-        s_price, strike, final_target, T, RISK_FREE_RATE, sigma, 
-        num_sims=10000, return_paths=True,
-        j_lambda=j_lambda, j_mu=j_mu, j_sigma=j_sigma
-    )
-    
-    # Advanced Metrics
-    epv_score = prob_target * (final_target / s_price)
-    dist_to_target = (final_target / s_price) - 1
-    theta_risk = dist_to_target / (dte / 30.0)
-    
-    return jsonify({
-        "s_price": float(s_price),
-        "final_target": float(final_target),
-        "prob_strike": float(prob_strike),
-        "prob_target": float(prob_target),
-        "epv_score": float(epv_score),
-        "theta_risk": "HIGH" if theta_risk > 0.1 else "MODERATE" if theta_risk > 0.05 else "LOW",
-        "j_params": {"lambda": float(j_lambda), "mu": float(j_mu), "sigma": float(j_sigma)},
-        "distribution": paths[:, -1].tolist() # Final prices for histogram
-    })
+        prob_strike, prob_target, paths = monte_carlo_probabilities(
+            s_price, strike, final_target, T, RISK_FREE_RATE, sigma, 
+            num_sims=10000, return_paths=True,
+            j_lambda=j_lambda, j_mu=j_mu, j_sigma=j_sigma
+        )
+        
+        # Advanced Metrics
+        epv_score = prob_target * (final_target / s_price)
+        dist_to_target = (final_target / s_price) - 1
+        theta_risk = dist_to_target / (dte / 30.0)
+        
+        return jsonify({
+            "s_price": float(s_price),
+            "final_target": float(final_target),
+            "prob_strike": float(prob_strike),
+            "prob_target": float(prob_target),
+            "epv_score": float(epv_score),
+            "theta_risk": "HIGH" if theta_risk > 0.1 else "MODERATE" if theta_risk > 0.05 else "LOW",
+            "j_params": {"lambda": float(j_lambda), "mu": float(j_mu), "sigma": float(j_sigma)},
+            "distribution": paths[:, -1].tolist()
+        })
+    except Exception as e:
+        error_details = traceback.format_exc()
+        return jsonify({"error": str(e), "traceback": error_details}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

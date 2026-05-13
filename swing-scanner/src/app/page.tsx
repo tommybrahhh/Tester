@@ -138,7 +138,7 @@ export default function Home() {
                   />
                 </div>
 
-                {selectedTicker && <TickerDeepDive ticker={selectedTicker} />}
+                {selectedTicker && <TickerDeepDive ticker={selectedTicker} metrics={metrics} />}
               </>
             ) : (
               <div className="glass-card min-h-[400px] flex items-center justify-center text-gray-500 border-dashed">
@@ -153,10 +153,64 @@ export default function Home() {
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-             {/* Custom Simulator implementation would go here */}
-             <div className="glass-card p-10 text-center text-gray-500">
-               Simulator components will be implemented next.
-            </div>
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+               <div className="lg:col-span-1 space-y-6">
+                 <div className="glass-card p-6">
+                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6">Simulation Parameters</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Ticker Symbol</label>
+                        <input 
+                          className="w-full bg-white/5 border border-white/10 rounded px-4 py-2 text-white font-mono focus:ring-1 focus:ring-[var(--accent-green)] transition-all"
+                          defaultValue="SOFI"
+                          id="sim-ticker"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">DTE</label>
+                          <input type="number" className="w-full bg-white/5 border border-white/10 rounded px-4 py-2 text-white font-mono" defaultValue="30" id="sim-dte" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Strike</label>
+                          <input type="number" className="w-full bg-white/5 border border-white/10 rounded px-4 py-2 text-white font-mono" defaultValue="10" id="sim-strike" />
+                        </div>
+                      </div>
+                      <button 
+                        onClick={async () => {
+                          const ticker = (document.getElementById('sim-ticker') as HTMLInputElement).value;
+                          const dte = (document.getElementById('sim-dte') as HTMLInputElement).value;
+                          const strike = (document.getElementById('sim-strike') as HTMLInputElement).value;
+                          
+                          setLoading(true);
+                          try {
+                            const res = await fetch('/api/simulate', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ ticker, dte: parseInt(dte), strike: parseFloat(strike) })
+                            });
+                            const result = await res.json();
+                            alert(`Success! Probability of touch: ${(result.prob_strike * 100).toFixed(2)}%`);
+                          } catch (e) {
+                            alert("Simulation failed.");
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                        className="w-full bg-[var(--accent-green)] text-black font-bold py-3 rounded-lg hover:shadow-[0_0_20px_rgba(0,255,128,0.3)] transition-all uppercase text-xs"
+                      >
+                        {loading ? 'Simulating Path...' : 'Execute Monte Carlo'}
+                      </button>
+                    </div>
+                 </div>
+               </div>
+               <div className="lg:col-span-2">
+                 <div className="glass-card p-10 flex flex-col items-center justify-center text-gray-600 border-dashed min-h-[400px]">
+                    <Activity size={48} className="mb-4 opacity-20" />
+                    <p className="text-sm font-mono uppercase tracking-widest opacity-40">Visual projections will appear here</p>
+                 </div>
+               </div>
+             </div>
           </div>
         )}
       </div>
