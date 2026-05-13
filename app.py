@@ -347,7 +347,7 @@ if view_mode == "Scanner Terminal":
         st.info("System Ready. Configure assets and duration in the terminal sidebar to initiate analysis.")
 
 elif view_mode == "Custom Simulator":
-    st.header("🎯 CUSTOM PROBABILITY SIMULATOR")
+    st.header("CUSTOM PROBABILITY SIMULATOR")
     st.markdown("Run high-fidelity Monte Carlo simulations for specific contracts to evaluate feasibility.")
     
     col_in1, col_in2, col_in3, col_in4 = st.columns(4)
