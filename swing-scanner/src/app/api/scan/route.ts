@@ -13,13 +13,13 @@ export async function POST(request: Request) {
 
     for (const ticker of tickers) {
       try {
-        const quote = await yahooFinance.quote(ticker);
+        const quote = await yahooFinance.quote(ticker) as any;
         const options = await yahooFinance.options(ticker);
         const history = await yahooFinance.historical(ticker, { 
           period1: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
         });
 
-        const S = quote.regularMarketPrice;
+        const S = quote.regularMarketPrice || quote.bid || quote.ask;
         if (!S) continue;
 
         // Calculate Sigma (Volatility) manually
