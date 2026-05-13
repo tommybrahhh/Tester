@@ -16,50 +16,41 @@ Configuración: edita la sección CONFIG al inicio del script.
 
 import pandas as pd
 import numpy as np
-from scipy import stats
+import math
 from datetime import datetime, timedelta
 import json
 import os
 import sys
 
+def norm_cdf(x):
+    """Aproximación manual de la CDF de la Normal Estándar."""
+    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
 # ============================================
-# CONFIGURACIÓN — Edita aquí tus parámetros
+# CONFIGURACIÓN
 # ============================================
+RISK_FREE_RATE = 0.045
+JUMP_LAMBDA = 10.0
+JUMP_MU = -0.01
+JUMP_SIGMA = 0.05
+TARGET_GAIN_PCT = 0.15
+MIN_OI = 50
+MIN_VOLUME = 10
+EARNINGS_DAYS_FILTER = 10
+DIVIDEND_DAYS_FILTER = 5
 
-TICKERS = ['SOFI', 'F', 'PFE', 'KHC', 'BAC', 'T', 'VZ', 'NU']
-TARGET_GAIN_PCT = 0.15      # Objetivo: +15% en contrato
-DTE_MIN = 30                # Días mínimos a expiración
-DTE_MAX = 50                # Días máximos a expiración
-DELTA_MIN = 0.60            # Delta mínimo (ATM/ITM)
-DELTA_MAX = 0.80
-MIN_OI = 50                 # Open Interest mínimo
-MIN_VOLUME = 10             # Volumen mínimo
-MAX_IV_PERCENTILE = 0.35    # IV Percentile máximo
-RISK_FREE_RATE = 0.045      # Tasa libre de riesgo
-OUTPUT_DIR = './scanner_output'  # Directorio de salida
-
-# Filtros de Eventos Corporativos
-EARNINGS_DAYS_FILTER = 10   # Días mínimos hasta earnings
-DIVIDEND_DAYS_FILTER = 5    # Días buffer para ex-dividend
-
-# Ponderaciones del Score (deben sumar 1.0)
 SCORE_WEIGHTS = {
-    'mc_prob_target': 0.28,   # Prob. de alcanzar precio para +15% (Monte Carlo)
-    'mc_prob_strike': 0.08,   # Prob. de tocar el Strike (Monte Carlo)
-    'vol_edge': 0.15,         # Ventaja IV vs HV
-    'macro_beta': 0.10,       # Filtro Macro (SPY + Beta)
+    'mc_prob_target': 0.28,
+    'mc_prob_strike': 0.08,
+    'vol_edge': 0.15,
+    'macro_beta': 0.10,
     'pcr_sentiment': 0.08,
     'zscore_ema': 0.08,
     'momentum_rsi': 0.08,
     'liquidity': 0.05,
-    'max_pain': 0.05,         # Proximidad a Max Pain
-    'vol_skew': 0.05,         # Skew relativo (Strike vs ATM)
+    'max_pain': 0.05,
+    'vol_skew': 0.05,
 }
-
-# Parámetros Jump-Diffusion (Merton)
-JUMP_LAMBDA = 10.0          # Saltos esperados por año
-JUMP_MU = -0.01             # Media del salto (un poco sesgado a la baja)
-JUMP_SIGMA = 0.05           # Desviación estándar del salto
 
 # ============================================
 # FUNCIONES AUXILIARES
@@ -352,7 +343,7 @@ def calculate_max_pain(calls, puts):
     except:
         return None
 
-def score_opportunity(row, stock_metrics, dte, iv_threshold, pcr_value, max_pain=None, atm_iv=None):
+def score_opportunity(row, stock_metrics, dte, iv_threshold, pcr_value, max_pain=None, atm_iv=None, delta_min=0.60, delta_max=0.80):
     """Calcular score avanzado con Jump-Diffusion, Vol Edge, Macro, Kelly, Max Pain y Skew."""
     S = stock_metrics['current_price']
     K = row['strike']
