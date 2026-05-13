@@ -265,10 +265,15 @@ def calc_stock_metrics(ticker, hist_df, spy_df=None):
     }
 
 def get_historical_data(ticker, period="3mo"):
-    """Obtener datos históricos usando yfinance."""
+    """Obtener datos históricos usando yfinance con User-Agent custom."""
     try:
         import yfinance as yf
-        stock = yf.Ticker(ticker)
+        # Use a session with a custom user-agent to avoid being blocked
+        import requests
+        session = requests.Session()
+        session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'})
+        
+        stock = yf.Ticker(ticker, session=session)
         hist = stock.history(period=period)
         hist = hist.reset_index()
         hist.columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume'] + list(hist.columns[6:])

@@ -21,6 +21,9 @@ export default function Home() {
 
   const runScan = async () => {
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout for Vercel Hobby
+
     try {
       const response = await fetch('/api/scan', {
         method: 'POST',
@@ -29,17 +32,27 @@ export default function Home() {
           tickers: tickers.split(',').map(t => t.trim()),
           dte_range: dteRange,
           delta_range: deltaRange
-        })
+        }),
+        signal: controller.signal
       });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
       const result = await response.json();
       setData(result.opportunities || []);
       setMetrics(result.metrics || {});
       if (result.opportunities?.length > 0) {
         setSelectedTicker(result.opportunities[0].ticker);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Scan failed:", err);
+      alert(err.name === 'AbortError' 
+        ? "Request timed out. Try fewer tickers." 
+        : `Scan failed: ${err.message}`);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
