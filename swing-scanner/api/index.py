@@ -11,7 +11,6 @@ try:
     from call_swing_scanner import run_scan_logic, get_historical_data, RISK_FREE_RATE
 except Exception as e:
     print(f"IMPORT ERROR: {e}")
-    print(traceback.format_exc())
 
 app = Flask(__name__)
 
@@ -36,7 +35,6 @@ def scan():
         if results_df.empty:
             return jsonify({"opportunities": [], "metrics": {}})
         
-        # Convert dates to strings for JSON
         opps = results_df.to_dict(orient="records")
         for op in opps:
             if "expiration" in op and hasattr(op["expiration"], "strftime"):
@@ -50,11 +48,7 @@ def scan():
         })
     except Exception as e:
         error_details = traceback.format_exc()
-        print(error_details)
-        return jsonify({
-            "error": str(e),
-            "traceback": error_details
-        }), 500
+        return jsonify({"error": str(e), "traceback": error_details}), 500
 
 @app.route("/api/simulate", methods=["POST"])
 def simulate():
@@ -92,24 +86,15 @@ def simulate():
             j_lambda=j_lambda, j_mu=j_mu, j_sigma=j_sigma
         )
         
-        # Advanced Metrics
-        epv_score = prob_target * (final_target / s_price)
-        dist_to_target = (final_target / s_price) - 1
-        theta_risk = dist_to_target / (dte / 30.0)
-        
         return jsonify({
             "s_price": float(s_price),
             "final_target": float(final_target),
             "prob_strike": float(prob_strike),
             "prob_target": float(prob_target),
-            "epv_score": float(epv_score),
-            "theta_risk": "HIGH" if theta_risk > 0.1 else "MODERATE" if theta_risk > 0.05 else "LOW",
-            "j_params": {"lambda": float(j_lambda), "mu": float(j_mu), "sigma": float(j_sigma)},
             "distribution": paths[:, -1].tolist()
         })
     except Exception as e:
-        error_details = traceback.format_exc()
-        return jsonify({"error": str(e), "traceback": error_details}), 500
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
