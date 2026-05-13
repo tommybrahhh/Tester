@@ -18,7 +18,6 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
 import json
 import os
 import sys
@@ -163,7 +162,7 @@ def prob_stock_reaches(S0, target, T, sigma):
     if target <= S0:
         return 1.0
     z = (np.log(target / S0) - (-0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
-    p_close = 1 - stats.norm.cdf(z)
+    p_close = 1 - norm_cdf(z)
     return min(2 * p_close, 1.0)
 
 def get_corporate_events(ticker):
@@ -689,6 +688,25 @@ def run_scanner():
     plt.tight_layout()
     chart_path = os.path.join(OUTPUT_DIR, 'scanner_chart.png')
     plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+    print(f"  Chart: {chart_path}")
+    plt.show()
+
+    print("\n✅ Scanner completado!")
+
+
+if __name__ == "__main__":
+    run_scanner()
+_chart.png')
+    plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+    print(f"  Chart: {chart_path}")
+    plt.show()
+
+    print("\n✅ Scanner completado!")
+
+
+if __name__ == "__main__":
+    run_scanner()
+nches='tight')
     print(f"  Chart: {chart_path}")
     plt.show()
 
