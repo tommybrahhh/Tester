@@ -590,6 +590,10 @@ def run_scanner():
     print(display_df.to_string(index=False))
 
     # 4. Guardar resultados
+    if os.environ.get('VERCEL'):
+        print("\n[4/4] Vercel detectado: Saltando guardado de archivos.")
+        return
+
     print("\n[4/4] Guardando resultados...")
     
     # CSV

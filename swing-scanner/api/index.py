@@ -2,8 +2,9 @@ from flask import Flask, request, jsonify
 import sys
 import os
 
-# Add the parent directory to sys.path to import call_swing_scanner
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+# Add the current directory to sys.path to import call_swing_scanner
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from call_swing_scanner import run_scan_logic, get_historical_data, RISK_FREE_RATE
 
 app = Flask(__name__)
